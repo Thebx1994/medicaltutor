@@ -293,6 +293,11 @@ function loadTopic(topic, savedContent = null) {
 
     // Scroll to the bottom to show the new topic section
     chatContent.scrollTop = chatContent.scrollHeight;
+
+    // Render any mathematical expressions in the loaded content
+    if (window.biochemicalRenderer) {
+        window.biochemicalRenderer.renderMathExpressions();
+    }
 }
 
 function updateSessionData(subject, topic, chatContent) {
@@ -396,6 +401,11 @@ function sendMessage() {
                     botMessageContainer.appendChild(copyButton);
                     chatContent.appendChild(botMessageContainer);
                     hasGPTResponded = true;
+
+                    // Render mathematical expressions in the new content
+                    if (window.biochemicalRenderer) {
+                        window.biochemicalRenderer.renderMathExpressions();
+                    }
                 }
 
                 // Update session with new chat content
@@ -632,6 +642,11 @@ window.onload = function() {
         if (savedContent) {
             chatContent.innerHTML = savedContent;
             hasGPTResponded = chatContent.querySelector('.bot-message') !== null;
+            
+            // Render mathematical expressions in the loaded content
+            if (window.biochemicalRenderer) {
+                window.biochemicalRenderer.renderMathExpressions();
+            }
         }
         isTopicSelected = true;
         

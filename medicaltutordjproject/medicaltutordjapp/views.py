@@ -271,57 +271,59 @@ def ask_gpt(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'User not authenticated'}, status=401)
 
-    # Extract parameters with default values
-    subject = request.GET.get('subject', '')
-    topic = request.GET.get('topic', '')
+    subject = request.GET.get('subject', '').strip()
+    topic = request.GET.get('topic', '').strip()
     message = request.GET.get('message')
+    language = request.GET.get('language', 'Spanish')
 
-    # Ensure the message is not empty
     if not message:
         return JsonResponse({'error': 'Message parameter is missing'}, status=400)
 
-    # Check if user has a paid plan with remaining queries
     user_profile = request.user.profile
     if user_profile.plan and user_profile.remaining_queries == 0:
         return JsonResponse({
-            'error': 'Has alcanzado el límite de preguntas en tu plan actual. ' +
-                    'Puedes seguir haciendo cuestionarios o adquirir un nuevo plan.'
+            'error': 'Has alcanzado el límite de preguntas en tu plan actual. '
+                     'Puedes seguir haciendo cuestionarios o adquirir un nuevo plan.'
         })
 
     try:
-        conversation = []
         
-        system_message = "You are a knowledgeable professor. Respond with detailed, informative, and professional answers. Always repond in the user's language."
+        # === IMPROVED MULTILINGUAL SYSTEM PROMPT ===
+        system_prompt = (
+            f"You are a knowledgeable professor. Always respond in {language}. "
+            f"Your tone should be professional, clear, and didactic.\n\n"
+        )
+
         if subject:
-            system_message += f" Specializing in {subject}. Answer questions only about this {subject}. For all other questions that are out of the scope of these subject, please respond politely that the question is out of your scope. In this case, do not answer it."
-        
-        conversation.append({
-            "role": "system", 
-            "content": system_message
-        })
+            system_prompt += (
+                f"You specialize in the subject: {subject}. "
+                f"Only answer questions related to {subject}. "
+                f"If a user asks something unrelated, politely reply that it's outside your scope and do not answer it.\n\n"
+            )
 
         if topic:
-            system_message += f"The discussion topic is: {topic}."
-            conversation.append({"role": "system", "content": system_message})
+            system_prompt += f"The current discussion topic is: {topic}.\n"
 
-        conversation.append({"role": "user", "content": message})
-        
-        # Make the API call to OpenAI to generate the response
+        # === CONVERSATION HISTORY ===
+        conversation = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message}
+        ]
+
+        # === GPT API CALL ===
         response = client.chat.completions.create(
             model="qwen/qwq-32b:free",
             messages=conversation,
         )
 
-        # Extract the assistant's reply
-        assistant_reply = response.choices[0].message.content
+        assistant_reply = response.choices[0].message.content.strip()
 
-        # Only decrement queries if the response was successful and relevant
+        # Decrement usage counters only on success
         if user_profile.plan:
             user_profile.decrement_queries()
-            # Check if both counters are 0 and reset to free plan
             if user_profile.remaining_queries == 0 and user_profile.remaining_quizzes == 0:
                 user_profile.plan = None
-                user_profile.save()
+            user_profile.save()
 
         return JsonResponse({'response': assistant_reply})
 
@@ -350,133 +352,79 @@ def check_quiz_limit(request):
 def generate_questions(request):
     if request.method == 'POST':
         try:
-            # Parse request data
+            
             data = json.loads(request.body)
             topic = data.get('topic', '')
             subject = data.get('subject', '')
-            question_type = data.get('question_type', 'topic')  # 'topic' or 'general'
-            
+            question_type = data.get('question_type', 'topic')  
+            language = data.get('language', 'Spanish') 
+
             if not subject:
                 return JsonResponse({'error': 'Subject is required'}, status=400)
-            
-            # For general tests, topic is not required
+
             if question_type == 'topic' and not topic:
                 return JsonResponse({'error': 'Topic is required for topic-specific tests'}, status=400)
-            
+
             json_path = get_app_file_path('utils', 'Summaries.json')
-            
-            # Create a unique file path for this user session
             user_id = request.user.id if request.user.is_authenticated else 'anonymous'
             session_id = request.session.session_key or 'default'
             temp_file_base = f'generated_questions_{user_id}_{session_id}'
-            
+
             temp_gift_path = get_app_file_path('tempfiles', f'{temp_file_base}.gift')
             temp_html_path = get_app_file_path('tempfiles', f'{temp_file_base}.html')
-            
+
             with open(json_path, 'r', encoding='utf-8') as file:
                 summaries = json.load(file)
-            
-            # Prepare content based on question type
+
             if question_type == 'general':
-                # For general tests, use all topics from the subject
                 if subject not in summaries:
                     return JsonResponse({'error': f'Subject {subject} not found in summaries'}, status=400)
-                
-                # Get all topics and their content for the subject
+
                 all_topics = summaries[subject]
                 summary_content = []
                 for topic_name, topic_content in all_topics.items():
-                    summary_content.append(f"{topic_name}: {', '.join(topic_content) if isinstance(topic_content, list) else topic_content}")
-                
+                    content = ', '.join(topic_content) if isinstance(topic_content, list) else topic_content
+                    summary_content.append(f"{topic_name}: {content}")
                 summary = "; ".join(summary_content)
                 content_description = f"general knowledge of {subject}"
             else:
-                # For topic-specific tests
                 if subject not in summaries or topic not in summaries[subject]:
-                    summary = ", nevermind there's no summary about this topic"
+                    summary = "No summary available for this topic."
                 else:
                     summary = str(summaries[subject][topic])
                 content_description = f"{topic} from {subject}"
-            
+
             conversation = data.get('conversation', '')
             num_questions = data.get('numQuestions', 3)
 
-            # Enhanced GIFT instructions for comprehensive mixed-format tests
-            instructions = """
-            General instructions for creating comprehensive mixed-format GIFT questions:
+            # === MULTILINGUAL PROMPT STARTS HERE ===
+            prompt = (
+                f"Generate exactly {num_questions} high-quality quiz questions in GIFT format, written entirely in {language}.\n\n"
+                f"Purpose: Assess {content_description} using a mix of question types and difficulty levels.\n"
+                f"{'Use this full subject summary: ' + summary if question_type == 'general' else 'Use this topic-specific summary: ' + summary}\n\n"
+                f"Additional user-provided context (if any): {conversation}\n\n"
+                f"Requirements:\n"
+                f"- All questions, answers, and labels must be written in {language}.\n"
+                f"- Use only valid GIFT-compatible question types: Multiple Choice (single answer), Multiple Response, True/False, Matching, Missing Word, Numerical.\n"
+                f"- Do not include Short Answer or Essay types.\n"
+                f"- Number each question as: '1. Question', '2. Question', etc.\n"
+                f"- Separate each question with a blank line.\n"
+                f"- Avoid HTML, answer feedback, explanations, or comments.\n"
+                f"- Format everything strictly according to GIFT syntax.\n"
+                f"- Use UTF-8 encoding and write in a clear, academic tone.\n"
+                f"- Cover a range of difficulty levels: recall, understanding, application.\n"
+                f"- Spread content evenly across subtopics.\n"
+                f"- Mix question types appropriately.\n\n"
+                f"Example formats:\n"
+                f"1. Who discovered gravity?{{=Newton ~Einstein ~Galileo ~Darwin}}\n"
+                f"2. Match the authors with their books:{{=Orwell -> 1984 =Huxley -> Brave New World =Tolkien -> The Hobbit}}\n"
+                f"3. The Earth is flat.{{FALSE}}\n"
+                f"4. Gandhi's birthday is on the {{~3rd ~15th =2nd}} of October.\n"
+                f"5. Pi to 3 decimals?{{#3.141..3.142}}\n\n"
+                f"Return only the GIFT-formatted questions. Do not include any instructions, explanations, or headings."
+            )
+            # === MULTILINGUAL PROMPT ENDS HERE ===
 
-            QUESTION TYPES TO USE:
-
-            1. Multiple Choice (Single Answer):
-            Who's buried in Grant's tomb?{=Grant ~no one ~Napoleon ~Churchill}
-
-            2. Multiple Choice (Multiple Answers):
-            What two people are entombed in Grant's tomb? {
-               ~%-100%No one
-               ~%50%Grant
-               ~%50%Grant's wife
-               ~%-100%Grant's father
-            }
-
-            3. True/False:
-            Grant was buried in a tomb in New York City.{T}
-            The sun rises in the West.{FALSE}
-
-            4. Matching:
-            Match the following countries with their capitals. {
-               =Canada -> Ottawa
-               =Italy  -> Rome
-               =Japan  -> Tokyo
-               =India  -> New Delhi
-            }
-
-            5. Missing Word:
-            Mahatma Gandhi's birthday is an Indian holiday on {~15th ~3rd =2nd} of October.
-
-            6. Numerical:
-            Simple range: When was Ulysses S. Grant born?{#1822:5}
-            Precise value: What is pi (3 decimals)?{#3.141..3.142}
-            Multiple ranges: When was Grant born?{#=1822:0 =%50%1822:2}
-
-            FORMATTING REQUIREMENTS:
-            - Questions must be numbered as "1. question text", "2. question text", etc.
-            - Questions must be separated by blank lines
-            - Use = for correct answers and ~ for incorrect ones
-            - For multiple choice, one = and several ~ answers
-            - For numerical, use # and specify ranges with : or ..
-            - For matching, minimum three pairs with ->
-            - Avoid HTML tags in questions/answers
-            - Don't write the question's type
-            - Don't show feedback for answers
-            - Use UTF-8 encoding to support special characters
-            - Ensure no introductory text, comments, or extra formatting in the output
-            - DO NOT generate Short Answer questions
-
-            CONTENT DISTRIBUTION REQUIREMENTS:
-            - Distribute questions evenly across different topics/concepts
-            - Include questions at different cognitive levels (recall, understanding, application)
-            - Balance question types appropriately
-            - Ensure comprehensive coverage of the subject material
-            - Make questions challenging but fair
-            - Include both basic and advanced concepts
-            """
-
-            # Generate questions using GPT with enhanced prompt for general tests
-            if question_type == 'general':
-                prompt = (
-                    f"Generate exactly {num_questions} comprehensive GIFT-format questions in the user's language for a general assessment of {subject}. "
-                    f"Create a balanced mix of question types covering key concepts from across the entire subject. "
-                    f"Use this comprehensive subject content: {summary}. "
-                    f"Additional context: {conversation}. "
-                    f"Ensure questions assess different cognitive levels and cover various topics within the subject. "
-                    f"Questions must strictly follow these GIFT formatting instructions:\n\n{instructions}"
-                )
-            else:
-                prompt = (
-                    f"Generate exactly {num_questions} GIFT-format questions in the user's language about the topic: {topic} from {subject} and this context: {conversation}. "
-                    f"Prioritize this summary: {summary}. Questions must strictly follow these GIFT formatting instructions:\n\n{instructions}"
-                )
-            
             response = client.chat.completions.create(
                 model="qwen/qwq-32b:free",
                 messages=[{"role": "user", "content": prompt}],
@@ -485,39 +433,33 @@ def generate_questions(request):
             if not response or not hasattr(response, 'choices') or not response.choices:
                 raise ValueError("GPT API did not return a valid response.")
 
-            # Extract the GIFT questions
             questions_gift = response.choices[0].message.content.strip()
 
             if not questions_gift:
                 raise ValueError("GPT API returned an empty response.")
-                
-            # Save the GIFT questions to a temporary file
+
             with open(temp_gift_path, 'w', encoding='utf-8') as f:
                 f.write(questions_gift)
 
-            # Parse the GIFT file into HTML format
             gift_parser = gisfttohtml(temp_gift_path)
             gift_parser.save_file(temp_html_path)
 
-            # Store the paths in the session for later use
             request.session['temp_gift_path'] = temp_gift_path
             request.session['temp_html_path'] = temp_html_path
             request.session['current_question_type'] = question_type
 
-            # Only decrement the quiz count after successful generation and before redirecting
             if request.user.is_authenticated:
                 user_profile = request.user.profile
                 if user_profile.plan and user_profile.remaining_quizzes > 0:
                     user_profile.decrement_quizzes()
 
-            # Return the redirect URL only if everything succeeds
             return JsonResponse({'redirect_url': '/questions/'})
 
         except Exception as e:
             return JsonResponse({'error': 'Failed to generate questions', 'details': str(e)}, status=500)
 
-    # Handle GET requests
     return JsonResponse({'error': 'This endpoint only accepts POST requests.'}, status=400)
+
 
 def questions(request):
     # Get the user-specific HTML file path from the session
@@ -898,3 +840,4 @@ def restore_quiz_count(request):
         return JsonResponse({'success': False, 'message': 'No plan found'})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
