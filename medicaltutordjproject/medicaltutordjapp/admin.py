@@ -8,6 +8,10 @@ from .models import (
     Subject,
     Topic,
     Voucher,
+    Question,
+    QuestionOption,
+    QuizSession,
+    QuestionAttempt,
 )
 
 
@@ -66,3 +70,36 @@ class VouchersAdmin(admin.ModelAdmin):
     list_display = ("voucher_id", "transaction_id", "card_id", "amount", "created_at", "used")
     readonly_fields = ("voucher_id", "transaction_id", "card_id", "amount", "created_at", "used")
     search_fields = ("transaction_id",)
+
+
+@admin.register(Question)
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ("id", "short_stem", "difficulty", "status", "subject", "topic", "source", "created_at")
+    list_filter = ("status", "difficulty", "question_type", "subject")
+    search_fields = ("stem", "explanation", "source")
+    filter_horizontal = ("concepts",)
+
+    @admin.display(description="Question")
+    def short_stem(self, obj):
+        return obj.stem[:80]
+
+
+@admin.register(QuestionOption)
+class QuestionOptionAdmin(admin.ModelAdmin):
+    list_display = ("id", "question", "order", "is_correct")
+    list_filter = ("is_correct",)
+    search_fields = ("text",)
+
+
+@admin.register(QuizSession)
+class QuizSessionAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "subject", "topic", "started_at", "completed_at", "score")
+    list_filter = ("subject", "topic")
+    search_fields = ("user__username",)
+
+
+@admin.register(QuestionAttempt)
+class QuestionAttemptAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "question", "is_correct", "confidence", "response_time_ms", "attempted_at")
+    list_filter = ("is_correct", "confidence")
+    search_fields = ("user__username", "question__stem")
