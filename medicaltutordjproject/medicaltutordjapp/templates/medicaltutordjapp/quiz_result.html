@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultado — Medical Tutor</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/common.css' %}">
+</head>
+<body>
+<div class="container" style="max-width:900px;margin:30px auto;padding:20px;">
+    <h1>Resultado</h1>
+    <p style="font-size:2rem;"><strong>{{ percentage }}%</strong></p>
+    <p>{{ correct }} de {{ total }} respuestas correctas.</p>
+
+    <h2>¿Qué sigue?</h2>
+    <p>Medical Tutor ya registró tus respuestas. El siguiente paso del motor de aprendizaje será usar estos datos para priorizar tus repasos.</p>
+
+    <a href="{% url 'dashboard' %}">Volver al dashboard</a>
+</div>
+</body>
+</html>
