@@ -188,3 +188,4 @@ class UserStats(models.Model):
 # New learning architecture is introduced alongside the legacy models.
 # This keeps existing imports and database tables stable during migration.
 from .learning_models import Concept, Exam, ExamSubject, StudentProfile, Subject, Topic
+from .question_models import Question, QuestionAttempt, QuestionOption, QuizSession
