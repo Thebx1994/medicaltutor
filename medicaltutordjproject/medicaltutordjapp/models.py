@@ -1,6 +1,6 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
-from django.utils import timezone
+
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
@@ -22,14 +22,12 @@ class UserProfile(models.Model):
     def update_plan(self, new_plan):
         """Update user's plan and add the new limits to existing ones"""
         if self.plan:
-            # Add new limits to existing ones
             self.remaining_queries += new_plan.max_queries
             self.remaining_quizzes += new_plan.max_quizzes
         else:
-            # Set new limits
             self.remaining_queries = new_plan.max_queries
             self.remaining_quizzes = new_plan.max_quizzes
-        
+
         self.plan = new_plan
         self.save()
 
@@ -45,16 +43,16 @@ class UserProfile(models.Model):
         """Decrement remaining quizzes and check if plan should be reset"""
         if self.remaining_quizzes > 0:
             self.remaining_quizzes -= 1
-            # Only reset plan if both counters are 0
             if self.remaining_quizzes == 0 and self.remaining_queries == 0:
                 self.plan = None
             self.save()
             return True
         return False
 
+
 class Payment(models.Model):
     payment_id = models.AutoField(primary_key=True)
-    transaction_id = models.CharField(max_length=255, null=False)  
+    transaction_id = models.CharField(max_length=255, null=False)
     user = models.ForeignKey(User, on_delete=models.DO_NOTHING)
     amount = models.FloatField()
     payment_date = models.DateTimeField(blank=True, null=True)
@@ -63,21 +61,20 @@ class Payment(models.Model):
     class Meta:
         managed = True
         db_table = 'payments'
-        
+
     def save(self, *args, **kwargs):
-        # Get the receiver_id_card from the plan
         if hasattr(self, 'plan'):
             self.receiver_id_card = self.plan.receiver_id_card
         super().save(*args, **kwargs)
-        
-        
+
+
 class Voucher(models.Model):
     voucher_id = models.AutoField(primary_key=True)
-    transaction_id = models.CharField(max_length=255, null=False, unique=True)  # Make transaction_id unique
+    transaction_id = models.CharField(max_length=255, null=False, unique=True)
     card_id = models.CharField(max_length=255, null=False)
     amount = models.FloatField()
     created_at = models.DateTimeField(auto_now_add=True)
-    used = models.BooleanField(default=False)  # Add used field to track usage
+    used = models.BooleanField(default=False)
 
     class Meta:
         managed = True
@@ -87,7 +84,6 @@ class Voucher(models.Model):
         return f"Voucher {self.voucher_id} - {self.amount}"
 
     def mark_as_used(self):
-        """Mark the voucher as used"""
         self.used = True
         self.save()
 
@@ -105,16 +101,17 @@ class Plan(models.Model):
     class Meta:
         managed = True
         db_table = 'plans'
-        
+
     def __str__(self):
         return self.plan_name
+
 
 class ProcessedSubmission(models.Model):
     submission_id = models.CharField(max_length=100)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     processed = models.BooleanField(default=False)
-    
+
     class Meta:
         unique_together = ('submission_id', 'user')
         indexes = [
@@ -136,6 +133,7 @@ class ProcessedSubmission(models.Model):
                 submission.save()
             return submission
 
+
 class Quizzes(models.Model):
     quiz_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.DO_NOTHING)
@@ -156,8 +154,8 @@ class Quizzes(models.Model):
         managed = True
         db_table = 'quizzes'
         constraints = [
-        models.UniqueConstraint(fields=['submission'], name='unique_quiz_per_submission')
-    ]
+            models.UniqueConstraint(fields=['submission'], name='unique_quiz_per_submission')
+        ]
 
 
 class UserStats(models.Model):
@@ -165,7 +163,7 @@ class UserStats(models.Model):
     total_quizzes = models.IntegerField(blank=True, null=True)
     last_activity = models.DateTimeField(blank=True, null=True)
     average_score = models.FloatField(blank=True, null=True)
-    subject_averages = models.JSONField(default=dict, blank=True)  # Store subject averages as JSON
+    subject_averages = models.JSONField(default=dict, blank=True)
 
     class Meta:
         managed = True
@@ -173,13 +171,13 @@ class UserStats(models.Model):
 
     def update_subject_averages(self):
         from django.db.models import Avg
-        # Calculate averages for each subject
-        subject_avgs = (Quizzes.objects
-                       .filter(user=self.user)
-                       .values('matter')
-                       .annotate(avg_score=Avg('score')))
-        
-        # Convert to dictionary format
+        subject_avgs = (
+            Quizzes.objects
+            .filter(user=self.user)
+            .values('matter')
+            .annotate(avg_score=Avg('score'))
+        )
+
         self.subject_averages = {
             item['matter']: float(item['avg_score'])
             for item in subject_avgs
@@ -187,3 +185,6 @@ class UserStats(models.Model):
         self.save()
 
 
+# New learning architecture is introduced alongside the legacy models.
+# This keeps existing imports and database tables stable during migration.
+from .learning_models import Concept, Exam, ExamSubject, StudentProfile, Subject, Topic
