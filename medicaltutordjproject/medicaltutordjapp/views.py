@@ -46,7 +46,7 @@ def get_app_file_path(*path_parts):
 
 def home(request):
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('dashboard')
     return render(request, "medicaltutordjapp/home.html")
 
 def signup(request):
@@ -63,7 +63,7 @@ def signup(request):
             
             # Log the user in
             login(request, user)
-            return redirect('chat')
+            return redirect('dashboard')
             
         except IntegrityError:
             return redirect('/?error=' + 'El correo electrónico ya está registrado')
@@ -98,7 +98,7 @@ def login_view(request):
             if 'current_topic' in request.session:
                 request.session['restored_topic'] = request.session['current_topic']
             
-            return redirect('chat')
+            return redirect('dashboard')
         else:
             return redirect('/?error=' + 'Correo electrónico o contraseña incorrectos')
     
