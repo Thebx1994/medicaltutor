@@ -1,4 +1,5 @@
 from medicaltutordjapp import views
+from medicaltutordjapp import demo_views
 from django.urls import path
 
 urlpatterns = [
@@ -10,6 +11,8 @@ urlpatterns = [
     path('subscribe/<int:plan_id>/', views.subscribe, name='subscribe'),
     path('check_quiz_limit/', views.check_quiz_limit, name='check_quiz_limit'),
     path('chat/', views.chat, name='chat'),
+    path('dashboard/', demo_views.dashboard, name='dashboard'),
+    path('adaptive-quiz/', demo_views.quiz, name='adaptive_quiz'),
     path('ask_gpt', views.ask_gpt, name='ask_gpt'),
     path('generate_questions/', views.generate_questions, name='generate_questions'),
     path('questions/', views.questions, name='questions'),
