@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Tutor — Dashboard</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/common.css' %}">
+</head>
+<body>
+<div class="container" style="max-width:1000px;margin:30px auto;padding:20px;">
+    <h1>Medical Tutor</h1>
+    <p>Tu sistema personal de aprendizaje médico.</p>
+
+    <section style="display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin:25px 0;">
+        <div style="padding:20px;border:1px solid #ddd;border-radius:12px;">
+            <strong>Precisión</strong><br><span style="font-size:2rem;">{{ accuracy }}%</span>
+        </div>
+        <div style="padding:20px;border:1px solid #ddd;border-radius:12px;">
+            <strong>Preguntas respondidas</strong><br><span style="font-size:2rem;">{{ total_attempts }}</span>
+        </div>
+        <div style="padding:20px;border:1px solid #ddd;border-radius:12px;">
+            <strong>Objetivo diario</strong><br><span style="font-size:2rem;">{{ profile.daily_goal_minutes }} min</span>
+        </div>
+    </section>
+
+    <h2>Practicar</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+        {% for subject in subjects %}
+        <div style="padding:18px;border:1px solid #ddd;border-radius:12px;">
+            <h3>{{ subject.name }}</h3>
+            <a href="{% url 'adaptive_quiz' %}?subject={{ subject.id }}">Iniciar 5 preguntas →</a>
+        </div>
+        {% empty %}
+        <p>No hay asignaturas activas.</p>
+        {% endfor %}
+    </div>
+
+    <h2 style="margin-top:35px;">Áreas para revisar</h2>
+    {% if concept_rows %}
+        <ul>
+        {% for concept in concept_rows %}
+            <li>{{ concept.name }} — {{ concept.correct_count }}/{{ concept.attempts_count }} correctas</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Completa tu primer cuestionario para que Medical Tutor empiece a detectar áreas de revisión.</p>
+    {% endif %}
+
+    <p style="margin-top:30px;">
+        <a href="{% url 'chat' %}">Ir al Tutor IA</a> ·
+        <a href="{% url 'logout' %}">Cerrar sesión</a>
+    </p>
+</div>
+</body>
+</html>
