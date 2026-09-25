@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Tutor — Quiz</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/common.css' %}">
+</head>
+<body>
+<div class="container" style="max-width:900px;margin:30px auto;padding:20px;">
+    <h1>Quiz adaptativo</h1>
+    {% if subject %}<p><strong>{{ subject.name }}</strong>{% if topic %} · {{ topic.name }}{% endif %}</p>{% endif %}
+    {% if message %}
+        <p>{{ message }}</p>
+        <a href="{% url 'dashboard' %}">Volver al dashboard</a>
+    {% else %}
+    <form method="post">
+        {% csrf_token %}
+        {% for question in questions %}
+        <fieldset style="margin:25px 0;padding:20px;border-radius:12px;">
+            <legend><strong>{{ forloop.counter }}. {{ question.stem }}</strong></legend>
+            {% for option in question.options.all %}
+            <label style="display:block;margin:12px 0;">
+                <input type="radio" name="question_{{ question.id }}" value="{{ option.id }}" required>
+                {{ option.text }}
+            </label>
+            {% endfor %}
+        </fieldset>
+        {% endfor %}
+        <button type="submit">Terminar cuestionario</button>
+    </form>
+    {% endif %}
+</div>
+</body>
+</html>
